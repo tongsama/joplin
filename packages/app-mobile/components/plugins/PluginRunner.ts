@@ -50,16 +50,44 @@ export default class PluginRunner extends BasePluginRunner {
 		// script directly from the filesystem (avoids transferring the full
 		// script text across the React Native bridge). On web, file:// URLs
 		// are blocked by CSP so we pass the script text directly.
-		const scriptFilePath = plugin.scriptText ? '' : `${plugin.baseDir}/index.js`;
+		//const scriptFilePath = plugin.scriptText ? '' : `${plugin.baseDir}/index.js`;
+
+		// On web, file:// URLs are blocked by browsers so we must pass the
+		// script text directly. In some code paths, however, PluginService loads
+		// mobile plugins with an empty scriptText. This is valid on native mobile
+		// because the WebView can read from the filesystem, but it breaks on web:
+		// /app/cache/<plugin>/index.js is interpreted as file:///app/cache/... and
+		// the browser blocks it with "Not allowed to load local resource".
+		let scriptText = plugin.scriptText;
+		let scriptFilePath = scriptText ? '' : `${plugin.baseDir}/index.js`;
+
+		if (shim.mobilePlatform() === 'web') {
+			if (!scriptText) {
+				scriptText = await shim.fsDriver().readFile(`${plugin.baseDir}/index.js`, 'utf8');
+			}
+
+			// Never pass a filesystem path to the plugin iframe on web.
+			scriptFilePath = '';
+		}
+
+		logger.info('Plugin script load mode', {
+			pluginId,
+			hasScriptText: !!scriptText,
+			scriptTextLength: scriptText?.length ?? 0,
+			scriptFilePath,
+		});
+
+
 		this.webviewRef.current.injectJS(`
 			pluginBackgroundPage.runPlugin(
 				${JSON.stringify(shim.injectedJs('pluginBackgroundPage'))},
 				${JSON.stringify(scriptFilePath)},
 				${JSON.stringify(messageChannelId)},
 				${JSON.stringify(plugin.id)},
-				${JSON.stringify(plugin.scriptText)},
+ 				${JSON.stringify(scriptText)},
 			);
 		`);
+				//${JSON.stringify(plugin.scriptText)},
 
 		messenger.onWebViewLoaded();
 	}
