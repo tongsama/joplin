@@ -16,13 +16,17 @@ jobs:
       (github.event_name == 'pull_request_review' &&
        (github.event.review.user.login == 'coderabbitai' || github.event.review.user.login == 'coderabbitai[bot]'))
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
-      pull-requests: write
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CODERABBIT_CLEANUP_APP_ID }}
+          private-key: ${{ secrets.CODERABBIT_CLEANUP_APP_PRIVATE_KEY }}
+
       - name: Clean up CodeRabbit comments
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |

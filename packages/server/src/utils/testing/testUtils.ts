@@ -314,7 +314,15 @@ export function models() {
 }
 
 export function parseHtml(html: string): Document {
-	const dom = new jsdom.JSDOM(html);
+	const virtualConsole = new jsdom.VirtualConsole();
+	virtualConsole.sendTo(console, { omitJSDOMErrors: true });
+	virtualConsole.on('jsdomError', (error: Error & { detail?: unknown }) => {
+		// JSDOM's CSS parser doesn't support modern syntax (nested selectors, :has(), etc.) used in
+		// the rendered note stylesheets, so it spams the console. The HTML parse itself is unaffected.
+		if (error.message?.includes('Could not parse CSS stylesheet')) return;
+		console.error(error.stack, error.detail);
+	});
+	const dom = new jsdom.JSDOM(html, { virtualConsole });
 	return dom.window.document;
 }
 
@@ -501,40 +509,6 @@ export function checkContextError(context: AppContext) {
 		const body = (context.response?.body || {}) as { code?: ErrorCode };
 		throw new ApiError(`${context.method} ${context.path} ${JSON.stringify(context.response)}`, context.response.status, body.code);
 	}
-}
-
-export async function credentialFile(filename: string): Promise<string> {
-	const filePath = `${require('os').homedir()}/joplin-credentials/${filename}`;
-	if (await fs.pathExists(filePath)) return filePath;
-	return '';
-}
-
-export async function readCredentialFile(filename: string, defaultValue: string = null) {
-	const filePath = await credentialFile(filename);
-	if (!filePath) {
-		if (defaultValue === null) throw new Error(`File not found: ${filename}`);
-		return defaultValue;
-	}
-
-	const r = await fs.readFile(filePath);
-	return r.toString();
-}
-
-export function credentialFileSync(filename: string): string {
-	const filePath = `${require('os').homedir()}/joplin-credentials/${filename}`;
-	if (fs.pathExistsSync(filePath)) return filePath;
-	return '';
-}
-
-export function readCredentialFileSync(filename: string, defaultValue: string = null) {
-	const filePath = credentialFileSync(filename);
-	if (!filePath) {
-		if (defaultValue === null) throw new Error(`File not found: ${filename}`);
-		return defaultValue;
-	}
-
-	const r = fs.readFileSync(filePath);
-	return r.toString();
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-types, @typescript-eslint/no-explicit-any -- Old code before rule was applied, Old code before rule was applied
